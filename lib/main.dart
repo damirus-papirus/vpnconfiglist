@@ -10,7 +10,7 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sing_box/sing_box.dart';
 
-const appVersion = '1.0.1';
+const appVersion = '1.0.2';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -70,6 +70,7 @@ class _OnvpnAppState extends State<OnvpnApp> {
   Position? devicePosition;
   Offset? serverPosition;
   String serverLocationLabel = '';
+  String serverRegion = 'United States';
   StreamSubscription<Position>? positionSub;
   StreamSubscription<SingBoxConnectionStatus>? statusSub;
   SingBoxConnectionStatus connectionStatus =
@@ -97,10 +98,12 @@ class _OnvpnAppState extends State<OnvpnApp> {
     final prefs = await SharedPreferences.getInstance();
     final links = prefs.getStringList('profiles') ?? <String>[];
     final savedUrl = prefs.getString('subscription_url') ?? '';
+    final savedRegion = prefs.getString('server_region') ?? 'United States';
     final active = prefs.getString('selected_link');
     if (!mounted) return;
     setState(() {
       subscriptionUrl = savedUrl;
+      serverRegion = savedRegion;
       profiles
         ..clear()
         ..addAll(links.map(_profileFromLink));
@@ -191,11 +194,50 @@ class _OnvpnAppState extends State<OnvpnApp> {
     return null;
   }
 
+  Offset? _regionCoordinates(String region) {
+    const regions = <String, Offset>{
+      'United States': Offset(-98.5795, 39.8283),
+      'Canada': Offset(-106.3468, 56.1304),
+      'Germany': Offset(10.4515, 51.1657),
+      'Estonia': Offset(25.0136, 58.5953),
+      'Russia': Offset(105.3188, 61.5240),
+      'United Kingdom': Offset(-3.4360, 55.3781),
+      'Singapore': Offset(103.8198, 1.3521),
+      'Netherlands': Offset(5.2913, 52.1326),
+      'France': Offset(2.2137, 46.2276),
+      'Japan': Offset(138.2529, 36.2048),
+    };
+    return regions[region];
+  }
+
+  Future<void> _setServerRegion(String region) async {
+    setState(() {
+      serverRegion = region;
+      serverPosition = null;
+      serverLocationLabel = '';
+    });
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('server_region', region);
+    await _resolveServer();
+  }
+
   Future<void> _resolveServer() async {
     final link = selectedLink;
     if (link == null) return;
     final profile = profiles.where((p) => p.link == link).firstOrNull;
     if (profile == null) return;
+
+    // Manual region avoids incorrect GeoIP results from CDN/anycast addresses.
+    if (serverRegion != 'Auto') {
+      final manualPoint = _regionCoordinates(serverRegion);
+      if (manualPoint != null && mounted) {
+        setState(() {
+          serverPosition = manualPoint;
+          serverLocationLabel = '$serverRegion · вручную';
+        });
+      }
+      return;
+    }
 
     // An explicit region in the subscription's server name is more useful
     // than GeoIP for anycast/CDN addresses.
@@ -583,6 +625,36 @@ class _OnvpnAppState extends State<OnvpnApp> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              const Text('Страна VPN-сервера', style: TextStyle(fontWeight: FontWeight.w700)),
+              const SizedBox(height: 8),
+              DropdownButtonFormField<String>(
+                value: serverRegion,
+                isExpanded: true,
+                decoration: InputDecoration(
+                  filled: true,
+                  fillColor: const Color(0xFF090D16),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(13), borderSide: BorderSide.none),
+                ),
+                items: const [
+                  DropdownMenuItem(value: 'United States', child: Text('США')),
+                  DropdownMenuItem(value: 'Canada', child: Text('Канада')),
+                  DropdownMenuItem(value: 'Germany', child: Text('Германия')),
+                  DropdownMenuItem(value: 'Estonia', child: Text('Эстония')),
+                  DropdownMenuItem(value: 'Russia', child: Text('Россия')),
+                  DropdownMenuItem(value: 'United Kingdom', child: Text('Великобритания')),
+                  DropdownMenuItem(value: 'Singapore', child: Text('Сингапур')),
+                  DropdownMenuItem(value: 'Netherlands', child: Text('Нидерланды')),
+                  DropdownMenuItem(value: 'France', child: Text('Франция')),
+                  DropdownMenuItem(value: 'Japan', child: Text('Япония')),
+                  DropdownMenuItem(value: 'Auto', child: Text('Автоопределение (GeoIP)')),
+                ],
+                onChanged: (value) {
+                  if (value != null) _setServerRegion(value);
+                },
+              ),
+              const SizedBox(height: 6),
+              const Text('Выбери фактическую страну сервера. Ручной выбор точнее GeoIP для VPN и CDN.', style: TextStyle(color: Colors.white54, fontSize: 11)),
+              const SizedBox(height: 18),
               const Text('URL подписки', style: TextStyle(fontWeight: FontWeight.w700)),
               const SizedBox(height: 8),
               TextField(
@@ -608,7 +680,7 @@ class _OnvpnAppState extends State<OnvpnApp> {
                 ),
               ),
               const SizedBox(height: 8),
-              const Text('Запрос подписки отправляется с User-Agent Onvpn/1.0.0/vpnconnection.', style: TextStyle(color: Colors.white54, fontSize: 11)),
+              const Text('Запрос подписки отправляется с User-Agent Onvpn/$appVersion/vpnconnection.', style: TextStyle(color: Colors.white54, fontSize: 11)),
             ],
           ),
         ),
@@ -794,8 +866,7 @@ class _AnimatedRouteMapState extends State<AnimatedRouteMap>
                   ),
                   children: [
                     TileLayer(
-                      urlTemplate: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
-                      subdomains: const ['a', 'b', 'c', 'd'],
+                      urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
                       userAgentPackageName: 'com.onvpn.app',
                       maxNativeZoom: 19,
                     ),
@@ -830,7 +901,7 @@ class _AnimatedRouteMapState extends State<AnimatedRouteMap>
                     child: const Padding(
                       padding: EdgeInsets.symmetric(horizontal: 5, vertical: 2),
                       child: Text(
-                        '© OpenStreetMap · CARTO',
+                        '© OpenStreetMap contributors',
                         style: TextStyle(color: Colors.white54, fontSize: 8),
                       ),
                     ),
