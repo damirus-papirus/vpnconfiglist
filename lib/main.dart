@@ -10,7 +10,7 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sing_box/sing_box.dart';
 
-const appVersion = '1.0.2';
+const appVersion = '1.0.3';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -70,7 +70,7 @@ class _OnvpnAppState extends State<OnvpnApp> {
   Position? devicePosition;
   Offset? serverPosition;
   String serverLocationLabel = '';
-  String serverRegion = 'United States';
+  String serverRegion = 'Auto';
   StreamSubscription<Position>? positionSub;
   StreamSubscription<SingBoxConnectionStatus>? statusSub;
   SingBoxConnectionStatus connectionStatus =
@@ -98,7 +98,7 @@ class _OnvpnAppState extends State<OnvpnApp> {
     final prefs = await SharedPreferences.getInstance();
     final links = prefs.getStringList('profiles') ?? <String>[];
     final savedUrl = prefs.getString('subscription_url') ?? '';
-    final savedRegion = prefs.getString('server_region') ?? 'United States';
+    final savedRegion = prefs.getString('server_region') ?? 'Auto';
     final active = prefs.getString('selected_link');
     if (!mounted) return;
     setState(() {
@@ -227,26 +227,25 @@ class _OnvpnAppState extends State<OnvpnApp> {
     final profile = profiles.where((p) => p.link == link).firstOrNull;
     if (profile == null) return;
 
-    // Manual region avoids incorrect GeoIP results from CDN/anycast addresses.
-    if (serverRegion != 'Auto') {
-      final manualPoint = _regionCoordinates(serverRegion);
-      if (manualPoint != null && mounted) {
-        setState(() {
-          serverPosition = manualPoint;
-          serverLocationLabel = '$serverRegion · вручную';
-        });
-      }
-      return;
-    }
-
-    // An explicit region in the subscription's server name is more useful
-    // than GeoIP for anycast/CDN addresses.
+    // Explicit country in the profile name has priority over manual region and GeoIP.
     final namedLocation = _locationFromProfileName(profile.name);
     if (namedLocation != null) {
       if (mounted) {
         setState(() {
           serverPosition = namedLocation;
           serverLocationLabel = profile.name;
+        });
+      }
+      return;
+    }
+
+    // Manual region is a fallback when the profile name has no country.
+    if (serverRegion != 'Auto') {
+      final manualPoint = _regionCoordinates(serverRegion);
+      if (manualPoint != null && mounted) {
+        setState(() {
+          serverPosition = manualPoint;
+          serverLocationLabel = '$serverRegion · вручную';
         });
       }
       return;
@@ -653,7 +652,7 @@ class _OnvpnAppState extends State<OnvpnApp> {
                 },
               ),
               const SizedBox(height: 6),
-              const Text('Выбери фактическую страну сервера. Ручной выбор точнее GeoIP для VPN и CDN.', style: TextStyle(color: Colors.white54, fontSize: 11)),
+              const Text('Страна в имени профиля до символа | имеет приоритет. Ручной выбор используется, если страна не указана.', style: TextStyle(color: Colors.white54, fontSize: 11)),
               const SizedBox(height: 18),
               const Text('URL подписки', style: TextStyle(fontWeight: FontWeight.w700)),
               const SizedBox(height: 8),
