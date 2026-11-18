@@ -169,26 +169,26 @@ class _OnvpnAppState extends State<OnvpnApp> {
   Offset? _locationFromProfileName(String name) {
     final value = name.toLowerCase();
     if (value.contains('🇺🇸') ||
-        RegExp(r'\\b(usa|us|united states|america)\\b').hasMatch(value)) {
+        RegExp(r'\b(usa|us|united states|america)\\b').hasMatch(value)) {
       if (value.contains('new york')) return const Offset(-74.0060, 40.7128);
       if (value.contains('los angeles')) return const Offset(-118.2437, 34.0522);
       if (value.contains('miami')) return const Offset(-80.1918, 25.7617);
       if (value.contains('chicago')) return const Offset(-87.6298, 41.8781);
       return const Offset(-98.5795, 39.8283);
     }
-    if (value.contains('🇷🇺') || RegExp(r'\\b(russia|ru|moscow)\\b').hasMatch(value)) {
+    if (value.contains('🇷🇺') || RegExp(r'\b(russia|ru|moscow)\\b').hasMatch(value)) {
       return const Offset(37.6173, 55.7558);
     }
-    if (value.contains('🇩🇪') || RegExp(r'\\b(germany|de|frankfurt)\\b').hasMatch(value)) {
+    if (value.contains('🇩🇪') || RegExp(r'\b(germany|de|frankfurt)\\b').hasMatch(value)) {
       return const Offset(8.6821, 50.1109);
     }
-    if (value.contains('🇳🇱') || RegExp(r'\\b(netherlands|nl|amsterdam)\\b').hasMatch(value)) {
+    if (value.contains('🇳🇱') || RegExp(r'\b(netherlands|nl|amsterdam)\\b').hasMatch(value)) {
       return const Offset(4.9041, 52.3676);
     }
-    if (value.contains('🇬🇧') || RegExp(r'\\b(uk|united kingdom|london)\\b').hasMatch(value)) {
+    if (value.contains('🇬🇧') || RegExp(r'\b(uk|united kingdom|london)\\b').hasMatch(value)) {
       return const Offset(-0.1276, 51.5072);
     }
-    if (value.contains('🇸🇬') || RegExp(r'\\b(singapore|sg)\\b').hasMatch(value)) {
+    if (value.contains('🇸🇬') || RegExp(r'\b(singapore|sg)\\b').hasMatch(value)) {
       return const Offset(103.8198, 1.3521);
     }
     return null;
