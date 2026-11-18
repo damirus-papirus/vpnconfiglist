@@ -1,15 +1,16 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
-import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:flutter_map/flutter_map.dart';
+import 'package:latlong2/latlong.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sing_box/sing_box.dart';
 
-const appVersion = '1.0.0';
+const appVersion = '1.0.1';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -68,6 +69,7 @@ class _OnvpnAppState extends State<OnvpnApp> {
   bool busy = false;
   Position? devicePosition;
   Offset? serverPosition;
+  String serverLocationLabel = '';
   StreamSubscription<Position>? positionSub;
   StreamSubscription<SingBoxConnectionStatus>? statusSub;
   SingBoxConnectionStatus connectionStatus =
@@ -161,27 +163,100 @@ class _OnvpnAppState extends State<OnvpnApp> {
     }
   }
 
+  Offset? _locationFromProfileName(String name) {
+    final value = name.toLowerCase();
+    if (value.contains('🇺🇸') ||
+        RegExp(r'\\b(usa|us|united states|america)\\b').hasMatch(value)) {
+      if (value.contains('new york')) return const Offset(-74.0060, 40.7128);
+      if (value.contains('los angeles')) return const Offset(-118.2437, 34.0522);
+      if (value.contains('miami')) return const Offset(-80.1918, 25.7617);
+      if (value.contains('chicago')) return const Offset(-87.6298, 41.8781);
+      return const Offset(-98.5795, 39.8283);
+    }
+    if (value.contains('🇷🇺') || RegExp(r'\\b(russia|ru|moscow)\\b').hasMatch(value)) {
+      return const Offset(37.6173, 55.7558);
+    }
+    if (value.contains('🇩🇪') || RegExp(r'\\b(germany|de|frankfurt)\\b').hasMatch(value)) {
+      return const Offset(8.6821, 50.1109);
+    }
+    if (value.contains('🇳🇱') || RegExp(r'\\b(netherlands|nl|amsterdam)\\b').hasMatch(value)) {
+      return const Offset(4.9041, 52.3676);
+    }
+    if (value.contains('🇬🇧') || RegExp(r'\\b(uk|united kingdom|london)\\b').hasMatch(value)) {
+      return const Offset(-0.1276, 51.5072);
+    }
+    if (value.contains('🇸🇬') || RegExp(r'\\b(singapore|sg)\\b').hasMatch(value)) {
+      return const Offset(103.8198, 1.3521);
+    }
+    return null;
+  }
+
   Future<void> _resolveServer() async {
     final link = selectedLink;
     if (link == null) return;
+    final profile = profiles.where((p) => p.link == link).firstOrNull;
+    if (profile == null) return;
+
+    // An explicit region in the subscription's server name is more useful
+    // than GeoIP for anycast/CDN addresses.
+    final namedLocation = _locationFromProfileName(profile.name);
+    if (namedLocation != null) {
+      if (mounted) {
+        setState(() {
+          serverPosition = namedLocation;
+          serverLocationLabel = profile.name;
+        });
+      }
+      return;
+    }
+
     final host = Uri.tryParse(link)?.host ?? '';
     if (host.isEmpty) return;
     try {
       final addresses = await InternetAddress.lookup(host);
-      if (addresses.isEmpty) return;
-      final ip = addresses.first.address;
-      final response = await http.get(
-        Uri.https('ipwho.is', '/$ip'),
-        headers: {'User-Agent': _userAgent},
-      ).timeout(const Duration(seconds: 8));
-      final json = jsonDecode(response.body) as Map<String, dynamic>;
-      if (json['success'] == true) {
-        final lat = (json['latitude'] as num).toDouble();
-        final lon = (json['longitude'] as num).toDouble();
-        if (mounted) setState(() => serverPosition = Offset(lon, lat));
+      final candidates = <({Offset point, String country, String code})>[];
+      for (final address in addresses) {
+        try {
+          final response = await http.get(
+            Uri.https('ipwho.is', '/${address.address}'),
+            headers: {'User-Agent': _userAgent},
+          ).timeout(const Duration(seconds: 8));
+          if (response.statusCode != 200) continue;
+          final data = jsonDecode(response.body) as Map<String, dynamic>;
+          if (data['success'] != true ||
+              data['latitude'] is! num ||
+              data['longitude'] is! num) continue;
+          final lat = (data['latitude'] as num).toDouble();
+          final lon = (data['longitude'] as num).toDouble();
+          if (!lat.isFinite || !lon.isFinite || lat.abs() > 90 || lon.abs() > 180) continue;
+          candidates.add((
+            point: Offset(lon, lat),
+            country: (data['country'] ?? '').toString(),
+            code: (data['country_code'] ?? '').toString().toUpperCase(),
+          ));
+        } catch (_) {
+          // Try the next DNS address; one bad GeoIP response must not win.
+        }
+      }
+      if (candidates.isNotEmpty && mounted) {
+        final chosen = candidates.first;
+        setState(() {
+          serverPosition = chosen.point;
+          serverLocationLabel = chosen.country.isEmpty ? 'VPN-сервер' : chosen.country;
+        });
+      } else if (mounted) {
+        setState(() {
+          serverPosition = null;
+          serverLocationLabel = '';
+        });
       }
     } catch (_) {
-      if (mounted) setState(() => serverPosition = null);
+      if (mounted) {
+        setState(() {
+          serverPosition = null;
+          serverLocationLabel = '';
+        });
+      }
     }
   }
 
@@ -425,7 +500,7 @@ class _OnvpnAppState extends State<OnvpnApp> {
                     const Spacer(),
                     const Icon(Icons.circle, size: 8, color: Color(0xFF9B7CFF)),
                     const SizedBox(width: 6),
-                    Text(serverPosition == null ? 'Сервер не определён' : 'VPN-сервер', style: const TextStyle(color: Colors.white54, fontSize: 11)),
+                    Text(serverPosition == null ? 'Сервер не определён' : (serverLocationLabel.isEmpty ? 'VPN-сервер' : serverLocationLabel), style: const TextStyle(color: Colors.white54, fontSize: 11)),
                   ],
                 ),
               ),
@@ -614,7 +689,8 @@ class AnimatedRouteMap extends StatefulWidget {
   State<AnimatedRouteMap> createState() => _AnimatedRouteMapState();
 }
 
-class _AnimatedRouteMapState extends State<AnimatedRouteMap> with SingleTickerProviderStateMixin {
+class _AnimatedRouteMapState extends State<AnimatedRouteMap>
+    with SingleTickerProviderStateMixin {
   late final AnimationController controller;
 
   @override
@@ -634,11 +710,11 @@ class _AnimatedRouteMapState extends State<AnimatedRouteMap> with SingleTickerPr
     super.didUpdateWidget(oldWidget);
     if (oldWidget.protocol != widget.protocol) {
       controller.duration = _duration;
-      controller
-        ..reset()
-        ..repeat();
+      controller..reset()..repeat();
     }
   }
+
+  LatLng _latLng(Offset value) => LatLng(value.dy, value.dx);
 
   @override
   void dispose() {
@@ -646,115 +722,123 @@ class _AnimatedRouteMapState extends State<AnimatedRouteMap> with SingleTickerPr
     super.dispose();
   }
 
+  Widget _marker(String label, Color color, IconData icon) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+        decoration: BoxDecoration(
+          color: const Color(0xFF101725).withOpacity(.96),
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: color.withOpacity(.75)),
+          boxShadow: [BoxShadow(color: color.withOpacity(.25), blurRadius: 10)],
+        ),
+        child: Row(mainAxisSize: MainAxisSize.min, children: [
+          Icon(icon, size: 13, color: color),
+          const SizedBox(width: 4),
+          Text(label, style: TextStyle(color: color, fontSize: 10, fontWeight: FontWeight.w800)),
+        ]),
+      );
+
   @override
   Widget build(BuildContext context) => AnimatedBuilder(
         animation: controller,
-        builder: (context, _) => CustomPaint(
-          painter: _WorldPainter(
-            phase: controller.value,
-            device: widget.device,
-            server: widget.server,
-            active: widget.active,
-          ),
-          size: Size.infinite,
-        ),
+        builder: (context, _) {
+          final markers = <Marker>[];
+          if (widget.device != null) {
+            markers.add(Marker(
+              point: _latLng(widget.device!),
+              width: 76,
+              height: 34,
+              child: _marker('YOU', const Color(0xFF58A9FF), Icons.my_location),
+            ));
+          }
+          if (widget.server != null) {
+            markers.add(Marker(
+              point: _latLng(widget.server!),
+              width: 76,
+              height: 34,
+              child: _marker('VPN', const Color(0xFFAB8AFF), Icons.shield_rounded),
+            ));
+          }
+          final bothKnown = widget.device != null && widget.server != null;
+          if (bothKnown && widget.active) {
+            final a = widget.device!;
+            final b = widget.server!;
+            final moving = Offset(
+              a.dx + (b.dx - a.dx) * controller.value,
+              a.dy + (b.dy - a.dy) * controller.value,
+            );
+            markers.add(Marker(
+              point: _latLng(moving),
+              width: 14,
+              height: 14,
+              child: Container(
+                decoration: BoxDecoration(
+                  color: const Color(0xFFB8A6FF),
+                  shape: BoxShape.circle,
+                  border: Border.all(color: Colors.white, width: 2),
+                  boxShadow: const [BoxShadow(color: Color(0x779B83FF), blurRadius: 10, spreadRadius: 3)],
+                ),
+              ),
+            ));
+          }
+
+          return ClipRRect(
+            borderRadius: BorderRadius.circular(14),
+            child: Stack(
+              children: [
+                FlutterMap(
+                  options: const MapOptions(
+                    initialCenter: LatLng(18, 0),
+                    initialZoom: 1.05,
+                    minZoom: 1.0,
+                    maxZoom: 6.0,
+                  ),
+                  children: [
+                    TileLayer(
+                      urlTemplate: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
+                      subdomains: const ['a', 'b', 'c', 'd'],
+                      userAgentPackageName: 'com.onvpn.app',
+                      maxNativeZoom: 19,
+                    ),
+                    if (bothKnown)
+                      PolylineLayer(
+                        polylines: [
+                          Polyline(
+                            points: [_latLng(widget.device!), _latLng(widget.server!)],
+                            strokeWidth: 2.5,
+                            color: const Color(0xFF9B83FF),
+                            pattern: StrokePattern.dashed(
+                              segments: widget.protocol == 'Hysteria2'
+                                  ? const [9, 5]
+                                  : widget.protocol == 'gRPC'
+                                      ? const [7, 7]
+                                      : const [5, 9],
+                            ),
+                          ),
+                        ],
+                      ),
+                    if (markers.isNotEmpty) MarkerLayer(markers: markers),
+                  ],
+                ),
+                Positioned(
+                  right: 7,
+                  bottom: 5,
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      color: const Color(0xCC090D16),
+                      borderRadius: BorderRadius.circular(5),
+                    ),
+                    child: const Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                      child: Text(
+                        '© OpenStreetMap · CARTO',
+                        style: TextStyle(color: Colors.white54, fontSize: 8),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          );
+        },
       );
-}
-
-class _WorldPainter extends CustomPainter {
-  _WorldPainter({required this.phase, required this.device, required this.server, required this.active});
-  final double phase;
-  final Offset? device;
-  final Offset? server;
-  final bool active;
-
-  Offset project(Offset lonLat, Size size) => Offset(
-        (lonLat.dx + 180) / 360 * size.width,
-        (90 - lonLat.dy) / 180 * size.height,
-      );
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final land = Paint()..color = const Color(0xFF1B2230);
-    final outline = Paint()
-      ..color = const Color(0xFF283246)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 0.7;
-    final continents = <List<Offset>>[
-      [Offset(-168, 70), Offset(-135, 72), Offset(-120, 58), Offset(-105, 50), Offset(-124, 32), Offset(-110, 22), Offset(-98, 18), Offset(-82, 8), Offset(-78, 25), Offset(-92, 45), Offset(-110, 60), Offset(-145, 62)],
-      [Offset(-80, 12), Offset(-66, 8), Offset(-52, -4), Offset(-48, -22), Offset(-60, -55), Offset(-72, -42), Offset(-78, -15)],
-      [Offset(-12, 72), Offset(30, 70), Offset(50, 55), Offset(42, 38), Offset(30, 30), Offset(22, 8), Offset(5, -5), Offset(-15, 10), Offset(-18, 35), Offset(-8, 55)],
-      [Offset(35, 68), Offset(70, 75), Offset(110, 65), Offset(150, 58), Offset(170, 48), Offset(145, 32), Offset(120, 10), Offset(105, -5), Offset(80, 8), Offset(65, 25), Offset(45, 38)],
-      [Offset(112, -10), Offset(154, -12), Offset(150, -40), Offset(132, -44), Offset(114, -30)],
-      [Offset(46, -13), Offset(50, -25), Offset(40, -35), Offset(32, -25)],
-      [Offset(-48, 82), Offset(-20, 80), Offset(-30, 60), Offset(-48, 58), Offset(-58, 72)],
-    ];
-    for (final polygon in continents) {
-      final path = Path();
-      for (var i = 0; i < polygon.length; i++) {
-        final point = project(polygon[i], size);
-        if (i == 0) {
-          path.moveTo(point.dx, point.dy);
-        } else {
-          path.lineTo(point.dx, point.dy);
-        }
-      }
-      path.close();
-      canvas.drawPath(path, land);
-      canvas.drawPath(path, outline);
-    }
-
-    if (device != null && server != null) {
-      final start = project(device!, size);
-      final end = project(server!, size);
-      final route = Path()..moveTo(start.dx, start.dy);
-      final control = Offset((start.dx + end.dx) / 2, math.min(start.dy, end.dy) - 24);
-      route.quadraticBezierTo(control.dx, control.dy, end.dx, end.dy);
-      final routePaint = Paint()
-        ..color = active ? const Color(0xFF9B83FF).withOpacity(.85) : Colors.white24
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 1.6;
-      canvas.drawPath(route, routePaint);
-      if (active) {
-        final metric = route.computeMetrics().first;
-        final dashPaint = Paint()
-          ..color = const Color(0xFFB7A7FF)
-          ..strokeWidth = 2.4
-          ..strokeCap = StrokeCap.round;
-        const dashLength = 7.0;
-        const gap = 11.0;
-        final total = metric.length;
-        final shift = phase * (dashLength + gap);
-        for (double d = -shift; d < total; d += dashLength + gap) {
-          final a = d.clamp(0.0, total);
-          final b = (d + dashLength).clamp(0.0, total);
-          if (b > a) canvas.drawPath(metric.extractPath(a, b), dashPaint);
-        }
-      }
-      _marker(canvas, start, const Color(0xFF58A9FF), 'YOU');
-      _marker(canvas, end, const Color(0xFF9B83FF), 'VPN');
-    } else {
-      if (device != null) _marker(canvas, project(device!, size), const Color(0xFF58A9FF), 'YOU');
-      if (server != null) _marker(canvas, project(server!, size), const Color(0xFF9B83FF), 'VPN');
-    }
-  }
-
-  void _marker(Canvas canvas, Offset point, Color color, String label) {
-    final glow = Paint()..color = color.withOpacity(.18);
-    final dot = Paint()..color = color;
-    canvas.drawCircle(point, 10, glow);
-    canvas.drawCircle(point, 4.2, dot);
-    final text = TextPainter(
-      text: TextSpan(text: label, style: TextStyle(color: color, fontSize: 8, fontWeight: FontWeight.w800, letterSpacing: .7)),
-      textDirection: TextDirection.ltr,
-    )..layout();
-    text.paint(canvas, point + const Offset(7, -13));
-  }
-
-  @override
-  bool shouldRepaint(covariant _WorldPainter oldDelegate) =>
-      oldDelegate.phase != phase ||
-      oldDelegate.device != device ||
-      oldDelegate.server != server ||
-      oldDelegate.active != active;
 }

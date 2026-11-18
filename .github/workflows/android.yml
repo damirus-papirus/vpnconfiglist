@@ -26,14 +26,22 @@ jobs:
         run: |
           flutter create --platforms=android --org com.onvpn --project-name onvpn /tmp/onvpn
           cp -R lib /tmp/onvpn/
+          mkdir -p /tmp/onvpn/assets/icon
+          cp -R tool /tmp/onvpn/
           cp pubspec.yaml /tmp/onvpn/
           cp analysis_options.yaml /tmp/onvpn/
           sed -i 's/android:label="onvpn"/android:label="ONVPN"/' /tmp/onvpn/android/app/src/main/AndroidManifest.xml
           sed -i '/<application/i\    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />\n    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />' /tmp/onvpn/android/app/src/main/AndroidManifest.xml
 
+      - name: Generate ONVPN launcher icon
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y python3-pil
+          python3 tool/generate_icon.py /tmp/onvpn/assets/icon/onvpn.png
+
       - name: Resolve dependencies
         working-directory: /tmp/onvpn
-        run: flutter pub get
+        run: flutter pub get && dart run flutter_launcher_icons
 
       - name: Build release APK
         working-directory: /tmp/onvpn
