@@ -1,0 +1,48 @@
+name: Build ONVPN APK
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Generate Android host project
+        run: |
+          flutter create --platforms=android --org com.onvpn --project-name onvpn /tmp/onvpn
+          cp -R lib /tmp/onvpn/
+          cp pubspec.yaml /tmp/onvpn/
+          cp analysis_options.yaml /tmp/onvpn/
+          sed -i 's/android:label="onvpn"/android:label="ONVPN"/' /tmp/onvpn/android/app/src/main/AndroidManifest.xml
+          sed -i '/<application/i\    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />\n    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />' /tmp/onvpn/android/app/src/main/AndroidManifest.xml
+
+      - name: Resolve dependencies
+        working-directory: /tmp/onvpn
+        run: flutter pub get
+
+      - name: Build release APK
+        working-directory: /tmp/onvpn
+        run: flutter build apk --release
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: ONVPN-APK
+          path: /tmp/onvpn/build/app/outputs/flutter-apk/app-release.apk
+          if-no-files-found: error
+          retention-days: 14
