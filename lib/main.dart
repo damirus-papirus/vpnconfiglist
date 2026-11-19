@@ -764,16 +764,16 @@ class _AnimatedRouteMapState extends State<AnimatedRouteMap>
     with SingleTickerProviderStateMixin {
   late final AnimationController controller;
 
-  @override
-  void initState() {
-    super.initState();
-    controller = AnimationController(vsync: this, duration: _duration)..repeat();
-  }
-
   Duration get _duration {
     if (widget.protocol == 'Hysteria2') return const Duration(milliseconds: 700);
     if (widget.protocol == 'gRPC') return const Duration(milliseconds: 1500);
     return const Duration(milliseconds: 2800);
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    controller = AnimationController(vsync: this, duration: _duration)..repeat();
   }
 
   @override
@@ -785,130 +785,192 @@ class _AnimatedRouteMapState extends State<AnimatedRouteMap>
     }
   }
 
-  LatLng _latLng(Offset value) => LatLng(value.dy, value.dx);
-
   @override
   void dispose() {
     controller.dispose();
     super.dispose();
   }
 
-  Widget _marker(String label, Color color, IconData icon) => Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
-        decoration: BoxDecoration(
-          color: const Color(0xFF101725).withOpacity(.96),
-          borderRadius: BorderRadius.circular(18),
-          border: Border.all(color: color.withOpacity(.75)),
-          boxShadow: [BoxShadow(color: color.withOpacity(.25), blurRadius: 10)],
+  @override
+  Widget build(BuildContext context) => ClipRRect(
+        borderRadius: BorderRadius.circular(14),
+        child: AnimatedBuilder(
+          animation: controller,
+          builder: (context, _) => CustomPaint(
+            painter: _OfflineWorldPainter(
+              device: widget.device,
+              server: widget.server,
+              progress: controller.value,
+              active: widget.active,
+            ),
+            child: const SizedBox.expand(),
+          ),
         ),
-        child: Row(mainAxisSize: MainAxisSize.min, children: [
-          Icon(icon, size: 13, color: color),
-          const SizedBox(width: 4),
-          Text(label, style: TextStyle(color: color, fontSize: 10, fontWeight: FontWeight.w800)),
-        ]),
       );
+}
+
+class _OfflineWorldPainter extends CustomPainter {
+  _OfflineWorldPainter({
+    required this.device,
+    required this.server,
+    required this.progress,
+    required this.active,
+  });
+
+  final Offset? device;
+  final Offset? server;
+  final double progress;
+  final bool active;
+
+  static const _land = Color(0xFF25334A);
+  static const _coast = Color(0xFF526987);
+  static const List<List<Offset>> _continents = [
+    // North America
+    [Offset(-168, 70), Offset(-145, 72), Offset(-125,  60), Offset(-110, 55),
+      Offset(-96, 50), Offset(-82, 25), Offset(-97, 15), Offset(-112, 28),
+      Offset(-130, 48), Offset(-150, 58)],
+    // South America
+    [Offset(-81, 12), Offset(-70, 9), Offset(-52, -4), Offset(--40, -20),
+      Offset(--50, -55), Offset(-70, -52), Offset(-78, -25)],
+    // Greenland
+    [Offset(-52, 82), Offset(-20, 78), Offset(--30, 60), Offset(--50, 60)],
+    // Europe and Asia
+    [Offset(-10, 72), Offset(20, 72), Offset(40, 62), Offset( 60,  60),
+      Offset(80, 70), Offset(105, 75), Offset(140,  60), Offset(170,  60),
+      Offset(160, 45), Offset(135, 35), Offset(120, 20), Offset(105, 8),
+      Offset(80, 8), Offset( 60, 25), Offset(45, 38), Offset(-30, 35),
+      Offset(20, 40), Offset(5, -50), Offset(-10, -50)],
+    // Africa
+    [Offset(-18, 35), Offset(10, 37), Offset(35, 30), Offset(50, 10),
+      Offset(40, -12), Offset(28, -35), Offset(15, -35), Offset(2, --20),
+      Offset(-10, 5)],
+    // India / south-east Asia
+    [Offset( 60, 25), Offset(90, 25), Offset(105, 10), Offset(120, 5),
+      Offset(110, -8), Offset(95, 5), Offset(78, 8)],
+    // Japan / islands
+    [Offset(130, 45), Offset(145, 48), Offset(142, -30), Offset(132, 32)],
+    // Australia
+    [Offset(112, -11), Offset(135, -10), Offset(153, -25), Offset(145, -40),
+      Offset(120, -35), Offset(113, --20)],
+    // Madagascar
+    [Offset(47, -13), Offset(51, -17), Offset(49, -25), Offset(45, -22)],
+  ];
+
+  Offset _project(Offset lonLat, Size size) {
+    final x = ((lonLat.dx + 180) / 360) * size.width;
+    final y = ((85 - lonLat.dy) / 165) * size.height;
+    return Offset(x, y);
+  }
+
+  Path _polygon(List<Offset> points, Size size) {
+    final path = Path();
+    for (var i = 0; i < points.length; i++) {
+      final p = _project(points[i], size);
+      if (i == 0) {
+        path.moveTo(p.dx, p.dy);
+      } else {
+        path.lineTo(p.dx, p.dy);
+      }
+    }
+    return path..close();
+  }
+
+  void _drawDashed(Canvas canvas, Offset a, Offset b, Paint paint) {
+    final delta = b - a;
+    final distance = delta.distance;
+    if (distance <= 0) return;
+    final direction = delta / distance;
+    const dash = 7.0;
+    const space = 5.0;
+    for (double d = 0; d < distance; d += dash + space) {
+      final end = (d + dash).clamp(0.0, distance);
+      canvas.drawLine(a + direction * d, a + direction * end, paint);
+    }
+  }
+
+  void _drawMarker(Canvas canvas, Offset point, String label, Color color) {
+    canvas.drawCircle(point, 9, Paint()..color = color.withOpacity(.18));
+    canvas.drawCircle(point, 5, Paint()..color = color);
+    canvas.drawCircle(point, 5, Paint()
+      ..color = Colors.white
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.4);
+    final tp = TextPainter(
+      text: TextSpan(text: label, style: TextStyle(
+        color: color, fontSize: 9, fontWeight: FontWeight.w800,
+      )),
+      textDirection: TextDirection.ltr,
+    )..layout();
+    final labelRect = RRect.fromRectAndRadius(
+      Rect.fromLTWH(point.dx - tp.width / 2 - 5, point.dy + 9, tp.width + 10, 15),
+      const Radius.circular(6),
+    );
+    canvas.drawRRect(labelRect, Paint()..color = const Color(0xEE101725));
+    tp.paint(canvas, Offset(point.dx - tp.width / 2, point.dy + 11));
+  }
 
   @override
-  Widget build(BuildContext context) => AnimatedBuilder(
-        animation: controller,
-        builder: (context, _) {
-          final markers = <Marker>[];
-          if (widget.device != null) {
-            markers.add(Marker(
-              point: _latLng(widget.device!),
-              width: 76,
-              height: 34,
-              child: _marker('YOU', const Color(0xFF58A9FF), Icons.my_location),
-            ));
-          }
-          if (widget.server != null) {
-            markers.add(Marker(
-              point: _latLng(widget.server!),
-              width: 76,
-              height: 34,
-              child: _marker('VPN', const Color(0xFFAB8AFF), Icons.shield_rounded),
-            ));
-          }
-          final bothKnown = widget.device != null && widget.server != null;
-          if (bothKnown && widget.active) {
-            final a = widget.device!;
-            final b = widget.server!;
-            final moving = Offset(
-              a.dx + (b.dx - a.dx) * controller.value,
-              a.dy + (b.dy - a.dy) * controller.value,
-            );
-            markers.add(Marker(
-              point: _latLng(moving),
-              width: 14,
-              height: 14,
-              child: Container(
-                decoration: BoxDecoration(
-                  color: const Color(0xFFB8A6FF),
-                  shape: BoxShape.circle,
-                  border: Border.all(color: Colors.white, width: 2),
-                  boxShadow: const [BoxShadow(color: Color(0x779B83FF), blurRadius: 10, spreadRadius: 3)],
-                ),
-              ),
-            ));
-          }
+  void paint(Canvas canvas, Size size) {
+    canvas.drawRect(Offset.zero & size, Paint()..color = const Color(0xFF0D1725));
 
-          return ClipRRect(
-            borderRadius: BorderRadius.circular(14),
-            child: Stack(
-              children: [
-                FlutterMap(
-                  options: const MapOptions(
-                    initialCenter: LatLng(18, 0),
-                    initialZoom: 1.05,
-                    minZoom: 1.0,
-                    maxZoom: 6.0,
-                  ),
-                  children: [
-                    TileLayer(
-                      urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                      userAgentPackageName: 'com.onvpn.app',
-                      maxNativeZoom: 19,
-                    ),
-                    if (bothKnown)
-                      PolylineLayer(
-                        polylines: [
-                          Polyline(
-                            points: [_latLng(widget.device!), _latLng(widget.server!)],
-                            strokeWidth: 2.5,
-                            color: const Color(0xFF9B83FF),
-                            pattern: StrokePattern.dashed(
-                              segments: widget.protocol == 'Hysteria2'
-                                  ? const [9, 5]
-                                  : widget.protocol == 'gRPC'
-                                      ? const [7, 7]
-                                      : const [5, 9],
-                            ),
-                          ),
-                        ],
-                      ),
-                    if (markers.isNotEmpty) MarkerLayer(markers: markers),
-                  ],
-                ),
-                Positioned(
-                  right: 7,
-                  bottom: 5,
-                  child: DecoratedBox(
-                    decoration: BoxDecoration(
-                      color: const Color(0xCC090D16),
-                      borderRadius: BorderRadius.circular(5),
-                    ),
-                    child: const Padding(
-                      padding: EdgeInsets.symmetric(horizontal: 5, vertical: 2),
-                      child: Text(
-                        '© OpenStreetMap contributors',
-                        style: TextStyle(color: Colors.white54, fontSize: 8),
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          );
-        },
-      );
+    // Subtle latitude/longitude grid.
+    final grid = Paint()
+      ..color = const Color(0xFF26364B)
+      ..strokeWidth = .7;
+    for (var lon = -150; lon <= 180; lon += 30) {
+      final x = ((lon + 180) / 360) * size.width;
+      canvas.drawLine(Offset(x, 0), Offset(x, size.height), grid);
+    }
+    for (var lat = -60; lat <= 60; lat += 30) {
+      final y = ((85 - lat) / 165) * size.height;
+      canvas.drawLine(Offset(0, y), Offset(size.width, y), grid);
+    }
+
+    final landPaint = Paint()..color = _land;
+    final coastPaint = Paint()
+      ..color = _coast
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = .8;
+    for (final continent in _continents) {
+      final path = _polygon(continent, size);
+      canvas.drawPath(path, landPaint);
+      canvas.drawPath(path, coastPaint);
+    }
+
+    if (device != null && server != null) {
+      final a = _project(device!, size);
+      final b = _project(server!, size);
+      final routePaint = Paint()
+        ..color = const Color(0xFF9B83FF)
+        ..strokeWidth = 2.2
+        ..strokeCap = StrokeCap.round;
+      _drawDashed(canvas, a, b, routePaint);
+      if (active) {
+        final moving = Offset(
+          a.dx + (b.dx - a.dx) * progress,
+          a.dy + (b.dy - a.dy) * progress,
+        );
+        canvas.drawCircle(moving, 7, Paint()..color = const Color(0x559B83FF));
+        canvas.drawCircle(moving, 3.5, Paint()..color = const Color(0xFFB8A6FF));
+      }
+    }
+    if (device != null) _drawMarker(canvas, _project(device!, size), 'YOU', const Color(0xFF58A9FF));
+    if (server != null) _drawMarker(canvas, _project(server!, size), 'VPN', const Color(0xFFAB8AFF));
+
+    final badge = TextPainter(
+      text: const TextSpan(text: 'OFFLINE MAP', style: TextStyle(
+        color: Color(0x887F9AB8), fontSize: 8, letterSpacing: 1.2,
+        fontWeight: FontWeight.w700,
+      )),
+      textDirection: TextDirection.ltr,
+    )..layout();
+    badge.paint(canvas, Offset(9, size.height - badge.height - 7));
+  }
+
+  @override
+  bool shouldRepaint(covariant _OfflineWorldPainter oldDelegate) =>
+      oldDelegate.device != device ||
+      oldDelegate.server != server ||
+      oldDelegate.progress != progress ||
+      oldDelegate.active != active;
 }
