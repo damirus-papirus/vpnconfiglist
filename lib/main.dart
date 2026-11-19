@@ -4,13 +4,11 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
-import 'package:flutter_map/flutter_map.dart';
-import 'package:latlong2/latlong.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sing_box/sing_box.dart';
 
-const appVersion = '1.0.3';
+const appVersion = '1.0.4';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -694,6 +692,7 @@ class _OnvpnAppState extends State<OnvpnApp> {
               _settingRow('Движок', 'sing-box'),
               _settingRow('Поддержка', 'VLESS Reality / Hysteria2'),
               _settingRow('Хранение профилей', 'Локально на устройстве'),
+              _settingRow('Карта', 'Встроенная офлайн-карта мира'),
             ],
           ),
         ),
@@ -883,7 +882,7 @@ class _OfflineWorldPainter extends CustomPainter {
     const dash = 7.0;
     const space = 5.0;
     for (double d = 0; d < distance; d += dash + space) {
-      final end = (d + dash).clamp(0.0, distance);
+      final end = (d + dash).clamp(0.0, distance).toDouble();
       canvas.drawLine(a + direction * d, a + direction * end, paint);
     }
   }
