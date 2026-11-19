@@ -8,7 +8,7 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sing_box/sing_box.dart';
 
-const appVersion = '1.0.4';
+const appVersion = '1.0.5';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -795,7 +795,11 @@ class _AnimatedRouteMapState extends State<AnimatedRouteMap>
         borderRadius: BorderRadius.circular(14),
         child: AnimatedBuilder(
           animation: controller,
-          builder: (context, _) => CustomPaint(
+          builder: (context, _) => Stack(
+            fit: StackFit.expand,
+            children: [
+              Image.asset('assets/map/world_map.jpg', fit: BoxFit.contain),
+              CustomPaint(
             painter: _OfflineWorldPainter(
               device: widget.device,
               server: widget.server,
@@ -803,6 +807,8 @@ class _AnimatedRouteMapState extends State<AnimatedRouteMap>
               active: widget.active,
             ),
             child: const SizedBox.expand(),
+          ),
+            ],
           ),
         ),
       );
@@ -820,59 +826,22 @@ class _OfflineWorldPainter extends CustomPainter {
   final Offset? server;
   final double progress;
   final bool active;
+  static const double _mapAspect = 1536 / 800;
 
-  static const _land = Color(0xFF25334A);
-  static const _coast = Color(0xFF526987);
-  static const List<List<Offset>> _continents = [
-    // North America
-    [Offset(-168, 70), Offset(-145, 72), Offset(-125, 60), Offset(-110, 55),
-      Offset(-96, 50), Offset(-82, 25), Offset(-97, 15), Offset(-112, 28),
-      Offset(-130, 48), Offset(-150, 58)],
-    // South America
-    [Offset(-81, 12), Offset(-70, 9), Offset(-52, -4), Offset(-40, -20),
-      Offset(-50, -55), Offset(-70, -52), Offset(-78, -25)],
-    // Greenland
-    [Offset(-52, 82), Offset(-20, 78), Offset(-30, 60), Offset(-50, 60)],
-    // Europe and Asia
-    [Offset(-10, 72), Offset(20, 72), Offset(40, 62), Offset(60, 60),
-      Offset(80, 70), Offset(105, 75), Offset(140, 60), Offset(170, 60),
-      Offset(160, 45), Offset(135, 35), Offset(120, 20), Offset(105, 8),
-      Offset(80, 8), Offset(60, 25), Offset(45, 38), Offset(30, 35),
-      Offset(20, 40), Offset(5, 50), Offset(-10, 50)],
-    // Africa
-    [Offset(-18, 35), Offset(10, 37), Offset(35, 30), Offset(50, 10),
-      Offset(40, -12), Offset(28, -35), Offset(15, -35), Offset(2, -20),
-      Offset(-10, 5)],
-    // India and south-east Asia
-    [Offset(60, 25), Offset(90, 25), Offset(105, 10), Offset(120, 5),
-      Offset(110, -8), Offset(95, 5), Offset(78, 8)],
-    // Japan
-    [Offset(130, 45), Offset(145, 48), Offset(142, 30), Offset(132, 32)],
-    // Australia
-    [Offset(112, -11), Offset(135, -10), Offset(153, -25), Offset(145, -40),
-      Offset(120, -35), Offset(113, -20)],
-    // Madagascar
-    [Offset(47, -13), Offset(51, -17), Offset(49, -25), Offset(45, -22)],
-  ];
-
-  Offset _project(Offset lonLat, Size size) {
-    final x = ((lonLat.dx + 180) / 360) * size.width;
-    final y = ((85 - lonLat.dy) / 165) * size.height;
-    return Offset(x, y);
-  }
-
-  Path _polygon(List<Offset> points, Size size) {
-    final path = Path();
-    for (var i = 0; i < points.length; i++) {
-      final p = _project(points[i], size);
-      if (i == 0) {
-        path.moveTo(p.dx, p.dy);
-      } else {
-        path.lineTo(p.dx, p.dy);
-      }
+  Rect _mapRect(Size size) {
+    final availableAspect = size.width / size.height;
+    if (availableAspect > _mapAspect) {
+      final width = size.height * _mapAspect;
+      return Rect.fromLTWH((size.width - width) / 2, 0, width, size.height);
     }
-    return path..close();
+    final height = size.width / _mapAspect;
+    return Rect.fromLTWH(0, (size.height - height) / 2, size.width, height);
   }
+
+  Offset _project(Offset lonLat, Rect rect) => Offset(
+    rect.left + ((lonLat.dx + 180) / 360) * rect.width,
+    rect.top + ((90 - lonLat.dy) / 180) * rect.height,
+  );
 
   void _drawDashed(Canvas canvas, Offset a, Offset b, Paint paint) {
     final delta = b - a;
@@ -888,12 +857,12 @@ class _OfflineWorldPainter extends CustomPainter {
   }
 
   void _drawMarker(Canvas canvas, Offset point, String label, Color color) {
-    canvas.drawCircle(point, 9, Paint()..color = color.withOpacity(.18));
-    canvas.drawCircle(point, 5, Paint()..color = color);
-    canvas.drawCircle(point, 5, Paint()
+    canvas.drawCircle(point, 12, Paint()..color = color.withOpacity(.18));
+    canvas.drawCircle(point, 6, Paint()..color = color);
+    canvas.drawCircle(point, 6, Paint()
       ..color = Colors.white
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.4);
+      ..strokeWidth = 1.5);
     final tp = TextPainter(
       text: TextSpan(text: label, style: TextStyle(
         color: color, fontSize: 9, fontWeight: FontWeight.w800,
@@ -901,47 +870,22 @@ class _OfflineWorldPainter extends CustomPainter {
       textDirection: TextDirection.ltr,
     )..layout();
     final labelRect = RRect.fromRectAndRadius(
-      Rect.fromLTWH(point.dx - tp.width / 2 - 5, point.dy + 9, tp.width + 10, 15),
+      Rect.fromLTWH(point.dx - tp.width / 2 - 5, point.dy + 11, tp.width + 10, 15),
       const Radius.circular(6),
     );
     canvas.drawRRect(labelRect, Paint()..color = const Color(0xEE101725));
-    tp.paint(canvas, Offset(point.dx - tp.width / 2, point.dy + 11));
+    tp.paint(canvas, Offset(point.dx - tp.width / 2, point.dy + 13));
   }
 
   @override
   void paint(Canvas canvas, Size size) {
-    canvas.drawRect(Offset.zero & size, Paint()..color = const Color(0xFF0D1725));
-
-    // Subtle latitude/longitude grid.
-    final grid = Paint()
-      ..color = const Color(0xFF26364B)
-      ..strokeWidth = .7;
-    for (var lon = -150; lon <= 180; lon += 30) {
-      final x = ((lon + 180) / 360) * size.width;
-      canvas.drawLine(Offset(x, 0), Offset(x, size.height), grid);
-    }
-    for (var lat = -60; lat <= 60; lat += 30) {
-      final y = ((85 - lat) / 165) * size.height;
-      canvas.drawLine(Offset(0, y), Offset(size.width, y), grid);
-    }
-
-    final landPaint = Paint()..color = _land;
-    final coastPaint = Paint()
-      ..color = _coast
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = .8;
-    for (final continent in _continents) {
-      final path = _polygon(continent, size);
-      canvas.drawPath(path, landPaint);
-      canvas.drawPath(path, coastPaint);
-    }
-
+    final rect = _mapRect(size);
     if (device != null && server != null) {
-      final a = _project(device!, size);
-      final b = _project(server!, size);
+      final a = _project(device!, rect);
+      final b = _project(server!, rect);
       final routePaint = Paint()
         ..color = const Color(0xFF9B83FF)
-        ..strokeWidth = 2.2
+        ..strokeWidth = 2.4
         ..strokeCap = StrokeCap.round;
       _drawDashed(canvas, a, b, routePaint);
       if (active) {
@@ -949,21 +893,12 @@ class _OfflineWorldPainter extends CustomPainter {
           a.dx + (b.dx - a.dx) * progress,
           a.dy + (b.dy - a.dy) * progress,
         );
-        canvas.drawCircle(moving, 7, Paint()..color = const Color(0x559B83FF));
+        canvas.drawCircle(moving, 8, Paint()..color = const Color(0x559B83FF));
         canvas.drawCircle(moving, 3.5, Paint()..color = const Color(0xFFB8A6FF));
       }
     }
-    if (device != null) _drawMarker(canvas, _project(device!, size), 'YOU', const Color(0xFF58A9FF));
-    if (server != null) _drawMarker(canvas, _project(server!, size), 'VPN', const Color(0xFFAB8AFF));
-
-    final badge = TextPainter(
-      text: const TextSpan(text: 'OFFLINE MAP', style: TextStyle(
-        color: Color(0x887F9AB8), fontSize: 8, letterSpacing: 1.2,
-        fontWeight: FontWeight.w700,
-      )),
-      textDirection: TextDirection.ltr,
-    )..layout();
-    badge.paint(canvas, Offset(9, size.height - badge.height - 7));
+    if (device != null) _drawMarker(canvas, _project(device!, rect), 'YOU', const Color(0xFF2588FF));
+    if (server != null) _drawMarker(canvas, _project(server!, rect), 'VPN', const Color(0xFF8B62FF));
   }
 
   @override
