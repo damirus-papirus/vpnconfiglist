@@ -825,32 +825,32 @@ class _OfflineWorldPainter extends CustomPainter {
   static const _coast = Color(0xFF526987);
   static const List<List<Offset>> _continents = [
     // North America
-    [Offset(-168, 70), Offset(-145, 72), Offset(-125,  60), Offset(-110, 55),
+    [Offset(-168, 70), Offset(-145, 72), Offset(-125, 60), Offset(-110, 55),
       Offset(-96, 50), Offset(-82, 25), Offset(-97, 15), Offset(-112, 28),
       Offset(-130, 48), Offset(-150, 58)],
     // South America
-    [Offset(-81, 12), Offset(-70, 9), Offset(-52, -4), Offset(--40, -20),
-      Offset(--50, -55), Offset(-70, -52), Offset(-78, -25)],
+    [Offset(-81, 12), Offset(-70, 9), Offset(-52, -4), Offset(-40, -20),
+      Offset(-50, -55), Offset(-70, -52), Offset(-78, -25)],
     // Greenland
-    [Offset(-52, 82), Offset(-20, 78), Offset(--30, 60), Offset(--50, 60)],
+    [Offset(-52, 82), Offset(-20, 78), Offset(-30, 60), Offset(-50, 60)],
     // Europe and Asia
-    [Offset(-10, 72), Offset(20, 72), Offset(40, 62), Offset( 60,  60),
-      Offset(80, 70), Offset(105, 75), Offset(140,  60), Offset(170,  60),
+    [Offset(-10, 72), Offset(20, 72), Offset(40, 62), Offset(60, 60),
+      Offset(80, 70), Offset(105, 75), Offset(140, 60), Offset(170, 60),
       Offset(160, 45), Offset(135, 35), Offset(120, 20), Offset(105, 8),
-      Offset(80, 8), Offset( 60, 25), Offset(45, 38), Offset(-30, 35),
-      Offset(20, 40), Offset(5, -50), Offset(-10, -50)],
+      Offset(80, 8), Offset(60, 25), Offset(45, 38), Offset(30, 35),
+      Offset(20, 40), Offset(5, 50), Offset(-10, 50)],
     // Africa
     [Offset(-18, 35), Offset(10, 37), Offset(35, 30), Offset(50, 10),
-      Offset(40, -12), Offset(28, -35), Offset(15, -35), Offset(2, --20),
+      Offset(40, -12), Offset(28, -35), Offset(15, -35), Offset(2, -20),
       Offset(-10, 5)],
-    // India / south-east Asia
-    [Offset( 60, 25), Offset(90, 25), Offset(105, 10), Offset(120, 5),
+    // India and south-east Asia
+    [Offset(60, 25), Offset(90, 25), Offset(105, 10), Offset(120, 5),
       Offset(110, -8), Offset(95, 5), Offset(78, 8)],
-    // Japan / islands
-    [Offset(130, 45), Offset(145, 48), Offset(142, -30), Offset(132, 32)],
+    // Japan
+    [Offset(130, 45), Offset(145, 48), Offset(142, 30), Offset(132, 32)],
     // Australia
     [Offset(112, -11), Offset(135, -10), Offset(153, -25), Offset(145, -40),
-      Offset(120, -35), Offset(113, --20)],
+      Offset(120, -35), Offset(113, -20)],
     // Madagascar
     [Offset(47, -13), Offset(51, -17), Offset(49, -25), Offset(45, -22)],
   ];
