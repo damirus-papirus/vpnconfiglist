@@ -26,7 +26,8 @@ jobs:
         run: |
           flutter create --platforms=android --org com.onvpn --project-name onvpn /tmp/onvpn
           cp -R lib /tmp/onvpn/
-          mkdir -p /tmp/onvpn/assets/icon
+          mkdir -p /tmp/onvpn/assets/icon /tmp/onvpn/assets/map
+          cp -R assets/map /tmp/onvpn/assets/
           cp -R tool /tmp/onvpn/
           cp pubspec.yaml /tmp/onvpn/
           cp analysis_options.yaml /tmp/onvpn/
