@@ -8,7 +8,7 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sing_box/sing_box.dart';
 
-const appVersion = '1.0.5';
+const appVersion = '1.0.6';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -798,7 +798,7 @@ class _AnimatedRouteMapState extends State<AnimatedRouteMap>
           builder: (context, _) => Stack(
             fit: StackFit.expand,
             children: [
-              Image.asset('assets/map/world_map.jpg', fit: BoxFit.contain),
+              Image.asset('assets/map/world_map.png', fit: BoxFit.contain),
               CustomPaint(
             painter: _OfflineWorldPainter(
               device: widget.device,
